@@ -1,0 +1,2 @@
+Ticker,Company,Sector,Current Price,Open Price (month),Price Change %,Price Norm Change %,Normalized Price Change %,RSI,Below 30d Avg,RSI_check,Drop_check,Recommendation,Target Mean Price,Error
+NVDA,NVIDIA,Technology,100,90,11.11,3.33,5.0,55,False,False,False,buy,120,
