@@ -2,6 +2,14 @@
 
 Utility for collecting stock data and generating daily reports.
 
+## Installation
+
+Install dependencies using `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
 ## Usage
 
 ```
