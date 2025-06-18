@@ -9,6 +9,7 @@ from ta.momentum import RSIIndicator
 import requests
 from config import (
     TICKERS,
+    SELL_TICKERS,
     RSI_THRESHOLD,
     PRICE_DROP_THRESHOLD,
     RESULT_DIR,
@@ -242,6 +243,47 @@ def top_recommendations(df, limit=5):
         message += msg_line
     return message
 
+
+def analyze_sell_signals(row):
+    """Return sell score based on overbought conditions."""
+    rsi_flag = float(row["RSI"]) > 70
+    growth_flag = float(row["Price Change %"]) > 20
+    rec_flag = str(row["Recommendation"]).lower() in ["sell", "underperform", "hold"]
+    return int(rsi_flag) + int(growth_flag) + int(rec_flag)
+
+
+def sell_recommendations(df, limit=5):
+    df = df.copy()
+    if "Recommendation" in df.columns:
+        df["Recommendation"] = df["Recommendation"].fillna("n/a").astype(str)
+
+    df = df[df["Ticker"].isin(SELL_TICKERS)]
+    df = df[df["Error"].isnull()]
+    df["Sell Score"] = df.apply(analyze_sell_signals, axis=1)
+    df = df[df["Sell Score"] >= 2]
+    df = df.sort_values(by=["Sell Score", "Price Change %"], ascending=[False, False]).head(limit)
+
+    message = "\U0001F4E4 *Рекомендовані до продажу:*"
+    for _, row in df.iterrows():
+        rec = escape_markdown(row["Recommendation"].capitalize())
+        rsi = float(row["RSI"])
+        change = float(row["Price Change %"])
+        direction = "🔼🟢" if change > 0 else "🔽🔴"
+        rsi_mark = " 🚫" if rsi > 70 else ""
+
+        ticker = escape_markdown(row["Ticker"])
+        name = escape_markdown(row["Company"]) if row.get("Company") else ""
+        msg_line = (
+            f"\n- *{ticker}* {name} | Ціна: ${row['Current Price']} | "
+            f"RSI: {row['RSI']}{rsi_mark} | Зміна: {direction} {abs(change)}% "
+            f"| Реком: {rec}"
+        )
+        if row.get("Target Mean Price") is not None:
+            msg_line += f" | 🎯 ${row['Target Mean Price']}"
+        msg_line += f" | Оцінка: {int(row['Sell Score'])}/3"
+        message += msg_line
+    return message
+
 def collect_data():
     """Collect fresh stock data and save it to today's CSV file."""
     today = datetime.now().strftime('%Y-%m-%d')
@@ -253,6 +295,23 @@ def collect_data():
 
     output_path = os.path.join(output_dir, f"{today}.csv")
     df.to_csv(output_path, index=False)
+    return df
+
+
+def load_latest_csv():
+    """Load the most recent CSV from the result directory."""
+    result_path = os.path.join(os.getcwd(), RESULT_DIR)
+    if not os.path.isdir(result_path):
+        raise FileNotFoundError("No result directory found")
+
+    files = sorted(f for f in os.listdir(result_path) if f.endswith(".csv"))
+    if not files:
+        raise FileNotFoundError("No CSV files found in result directory")
+
+    latest = files[-1]
+    df = pd.read_csv(os.path.join(result_path, latest))
+    if "Recommendation" in df.columns:
+        df["Recommendation"] = df["Recommendation"].fillna("n/a").astype(str)
     return df
 
 
@@ -377,6 +436,44 @@ def offer_history(ticker: str):
             )
 
 
+def sell_console():
+    df = load_latest_csv()
+    print(sell_recommendations(df))
+
+
+def sell_telegram():
+    df = load_latest_csv()
+    send_telegram_message(sell_recommendations(df))
+
+
+def show_history(ticker: str):
+    ticker = ticker.upper()
+    result_path = os.path.join(os.getcwd(), RESULT_DIR)
+    if not os.path.isdir(result_path):
+        print("No result directory found")
+        return
+
+    files = sorted(f for f in os.listdir(result_path) if f.endswith(".csv"))
+    rows = []
+    for fname in files:
+        date = fname[:-4]
+        df = pd.read_csv(os.path.join(result_path, fname))
+        match = df[df["Ticker"] == ticker]
+        if not match.empty:
+            row = match.iloc[0].copy()
+            row["Date"] = date
+            rows.append(row)
+
+    if not rows:
+        print("No history for", ticker)
+        return
+
+    hist_df = pd.DataFrame(rows)
+    cols = ["Date"] + [c for c in hist_df.columns if c != "Date"]
+    hist_df = hist_df[cols]
+    print(hist_df.to_string(index=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Stock analysis utility")
     parser.add_argument(
@@ -388,6 +485,9 @@ def main():
             "offer_console",
             "offer_telegram",
             "offer_history",
+            "sell_console",
+            "sell_telegram",
+            "show_history",
         ],
         help="Action to perform",
     )
@@ -413,6 +513,15 @@ def main():
             print("Ticker symbol required")
         else:
             offer_history(args.date)
+    elif args.command == "sell_console":
+        sell_console()
+    elif args.command == "sell_telegram":
+        sell_telegram()
+    elif args.command == "show_history":
+        if not args.date:
+            print("Ticker symbol required")
+        else:
+            show_history(args.date)
 
 if __name__ == "__main__":
     main()
