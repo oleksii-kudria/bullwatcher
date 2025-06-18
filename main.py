@@ -2,6 +2,7 @@
 import os
 from datetime import datetime
 import argparse
+from typing import Optional
 import pandas as pd
 import yfinance as yf
 from ta.momentum import RSIIndicator
@@ -212,14 +213,21 @@ def collect_data():
     return df
 
 
-def load_or_collect():
-    """Load today's data if available, otherwise collect it."""
-    today = datetime.now().strftime('%Y-%m-%d')
-    output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{today}.csv")
-    if os.path.exists(output_path):
-        df = pd.read_csv(output_path)
+def load_or_collect(date: Optional[str] = None):
+    """Load data for the given date or collect today's data."""
+    if date is None:
+        date = datetime.now().strftime('%Y-%m-%d')
+        output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{date}.csv")
+        if os.path.exists(output_path):
+            df = pd.read_csv(output_path)
+        else:
+            df = collect_data()
     else:
-        df = collect_data()
+        output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{date}.csv")
+        if os.path.exists(output_path):
+            df = pd.read_csv(output_path)
+        else:
+            raise FileNotFoundError(f"No data for {date}")
 
     # Ensure recommendation values are strings
     if 'Recommendation' in df.columns:
@@ -228,25 +236,25 @@ def load_or_collect():
     return df
 
 
-def report_console():
-    df = load_or_collect()
+def report_console(date: Optional[str] = None):
+    df = load_or_collect(date)
     for msg in format_sector_reports(df):
         print(msg)
 
 
-def report_telegram():
-    df = load_or_collect()
+def report_telegram(date: Optional[str] = None):
+    df = load_or_collect(date)
     for msg in format_sector_reports(df):
         send_telegram_message(msg)
 
 
-def offer_console():
-    df = load_or_collect()
+def offer_console(date: Optional[str] = None):
+    df = load_or_collect(date)
     print(top_recommendations(df))
 
 
-def offer_telegram():
-    df = load_or_collect()
+def offer_telegram(date: Optional[str] = None):
+    df = load_or_collect(date)
     send_telegram_message(top_recommendations(df))
 
 
@@ -263,18 +271,23 @@ def main():
         ],
         help="Action to perform",
     )
+    parser.add_argument(
+        "date",
+        nargs="?",
+        help="Date in YYYY-MM-DD format to load data from",
+    )
     args = parser.parse_args()
 
     if args.command == "collect":
         collect_data()
     elif args.command == "report_console":
-        report_console()
+        report_console(args.date)
     elif args.command == "report_telegram":
-        report_telegram()
+        report_telegram(args.date)
     elif args.command == "offer_console":
-        offer_console()
+        offer_console(args.date)
     elif args.command == "offer_telegram":
-        offer_telegram()
+        offer_telegram(args.date)
 
 if __name__ == "__main__":
     main()
