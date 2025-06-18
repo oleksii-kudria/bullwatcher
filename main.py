@@ -286,8 +286,16 @@ def offer_history(ticker: str):
         df = df.sort_values(by=['Score', 'Potential %'], ascending=[False, False]).head(5)
         match = df[df['Ticker'] == ticker]
         if not match.empty:
-            rec = match.iloc[0]['Recommendation']
-            print(f"{date}: {rec}")
+            row = match.iloc[0]
+            rec = escape_markdown(row['Recommendation'].capitalize())
+            pot = round(row['Potential %'], 2)
+            name = escape_markdown(row['Company']) if row['Company'] else ''
+            ticker_md = escape_markdown(row['Ticker'])
+            price = row['Target Mean Price']
+            print(
+                f"{date}: *{ticker_md}* {name} | Потенціал: +{pot}% | "
+                f"Реком: {rec} | 🎯 ${price}"
+            )
 
 
 def main():
