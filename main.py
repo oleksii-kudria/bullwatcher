@@ -192,11 +192,54 @@ def top_recommendations(df, limit=5):
 
     message = "\U0001F4A1 *Найперспективніші акції для купівлі:*"
     for _, row in df.iterrows():
+        rec = escape_markdown(row['Recommendation'].capitalize())
+        rsi = float(row['RSI'])
+        change = float(row['Price Change %'])
+        direction = "🔼🟢" if change > 0 else "🔽🔴"
+
+        rsi_flag = rsi < 40
+        drop_flag = change <= -5
+        rec_flag = row['Recommendation'] in ['buy', 'strong_buy']
+        score = sum([rsi_flag, drop_flag, rec_flag])
+
+        if score == 3:
+            emoji = '🔥'
+        elif score == 2:
+            emoji = '✅'
+        elif score == 1:
+            emoji = '⚠️'
+        else:
+            emoji = '❌'
+
+        risk_emoji = ''
+        if rsi > 80:
+            risk_emoji += " 🚫 Перегріта"
+        elif rsi < 30:
+            risk_emoji += " 🧊 Перепродана"
+        elif rsi < 40:
+            risk_emoji += " 📉 Потенціал"
+        elif 40 <= rsi <= 70:
+            risk_emoji += " ⚖️ Нейтральна"
+        elif rsi > 70:
+            risk_emoji += " 🔺 Оптимізм"
+
+        if change > 30:
+            risk_emoji += " ⚡ Висока волатильність"
+        elif abs(change) < 2:
+            risk_emoji += " 💧 Стабільна"
+
         ticker = escape_markdown(row['Ticker'])
         name = escape_markdown(row['Company'])
-        rec = escape_markdown(row['Recommendation'].capitalize())
         pot = round(row['Potential %'], 2)
-        message += f"\n- *{ticker}* {name} | Потенціал: +{pot}% | Реком: {rec} | 🎯 ${row['Target Mean Price']}"
+        msg_line = (
+            f"\n{emoji} *{ticker}* {name}: ${row['Current Price']} | "
+            f"Зміна: {direction} {abs(change)}% | RSI: {row['RSI']}{risk_emoji} "
+            f"| Реком: {rec}"
+        )
+        if row['Target Mean Price'] is not None:
+            msg_line += f" | 🎯 ${row['Target Mean Price']}"
+        msg_line += f" | Потенціал: +{pot}%"
+        message += msg_line
     return message
 
 def collect_data():
@@ -288,13 +331,49 @@ def offer_history(ticker: str):
         if not match.empty:
             row = match.iloc[0]
             rec = escape_markdown(row['Recommendation'].capitalize())
+            rsi = float(row['RSI'])
+            change = float(row['Price Change %'])
+            direction = "🔼🟢" if change > 0 else "🔽🔴"
+
+            rsi_flag = rsi < 40
+            drop_flag = change <= -5
+            rec_flag = row['Recommendation'] in ['buy', 'strong_buy']
+            score = sum([rsi_flag, drop_flag, rec_flag])
+
+            if score == 3:
+                emoji = '🔥'
+            elif score == 2:
+                emoji = '✅'
+            elif score == 1:
+                emoji = '⚠️'
+            else:
+                emoji = '❌'
+
+            risk_emoji = ''
+            if rsi > 80:
+                risk_emoji += " 🚫 Перегріта"
+            elif rsi < 30:
+                risk_emoji += " 🧊 Перепродана"
+            elif rsi < 40:
+                risk_emoji += " 📉 Потенціал"
+            elif 40 <= rsi <= 70:
+                risk_emoji += " ⚖️ Нейтральна"
+            elif rsi > 70:
+                risk_emoji += " 🔺 Оптимізм"
+
+            if change > 30:
+                risk_emoji += " ⚡ Висока волатильність"
+            elif abs(change) < 2:
+                risk_emoji += " 💧 Стабільна"
+
             pot = round(row['Potential %'], 2)
             name = escape_markdown(row['Company']) if row['Company'] else ''
             ticker_md = escape_markdown(row['Ticker'])
             price = row['Target Mean Price']
             print(
-                f"{date}: *{ticker_md}* {name} | Потенціал: +{pot}% | "
-                f"Реком: {rec} | 🎯 ${price}"
+                f"{date}: {emoji} *{ticker_md}* {name}: ${row['Current Price']} | "
+                f"Зміна: {direction} {abs(change)}% | RSI: {row['RSI']}{risk_emoji} "
+                f"| Реком: {rec} | 🎯 ${price} | Потенціал: +{pot}%"
             )
 
 
