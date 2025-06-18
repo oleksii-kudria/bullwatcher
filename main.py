@@ -97,6 +97,8 @@ def send_telegram_message(message):
 
 def format_sector_reports(df):
     df = df.copy()
+    if 'Recommendation' in df.columns:
+        df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
     df = df[df['Error'].isnull()] if 'Error' in df.columns else df
     df['Sector'] = df['Sector'].fillna('Unknown')
     sector_groups = df.groupby('Sector')
@@ -173,7 +175,11 @@ def format_sector_reports(df):
     return messages
 
 def top_recommendations(df, limit=5):
-    df = df[df['Error'].isnull() & df['Target Mean Price'].notnull()].copy()
+    df = df.copy()
+    if 'Recommendation' in df.columns:
+        df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
+
+    df = df[df['Error'].isnull() & df['Target Mean Price'].notnull()]
     df['Score'] = (
         (df['RSI'] < 40).astype(int) +
         (df['Price Change %'] <= -5).astype(int) +
@@ -211,8 +217,15 @@ def load_or_collect():
     today = datetime.now().strftime('%Y-%m-%d')
     output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{today}.csv")
     if os.path.exists(output_path):
-        return pd.read_csv(output_path)
-    return collect_data()
+        df = pd.read_csv(output_path)
+    else:
+        df = collect_data()
+
+    # Ensure recommendation values are strings
+    if 'Recommendation' in df.columns:
+        df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
+
+    return df
 
 
 def report_console():
