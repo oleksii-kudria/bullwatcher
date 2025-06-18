@@ -1,6 +1,6 @@
 # main.py
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import argparse
 from typing import Optional
 import pandas as pd
@@ -320,20 +320,47 @@ def load_latest_csv():
 
 
 def load_or_collect(date: Optional[str] = None):
-    """Load data for the given date or collect today's data."""
+    """Load data for the given date or collect today's data.
+
+    When no date is provided or the provided date equals today, the function
+    searches for CSV files for today and the two preceding days. This handles
+    cases when the market is closed (e.g. weekends) or data collection was
+    skipped. Data is only collected automatically on weekdays if no file exists
+    for today or the previous days.
+    """
+
     if date is None:
-        date = datetime.now().strftime('%Y-%m-%d')
-        output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{date}.csv")
-        if os.path.exists(output_path):
-            df = pd.read_csv(output_path)
-        else:
-            df = collect_data()
+        base_date = datetime.now().date()
     else:
-        output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{date}.csv")
+        base_date = datetime.strptime(date, "%Y-%m-%d").date()
+
+    search_dates = [base_date]
+
+    # If requesting today's data (either explicitly or implicitly), also check
+    # the two previous days in case the market was closed or data wasn't
+    # collected.
+    if date is None or base_date == datetime.now().date():
+        search_dates.append(base_date - timedelta(days=1))
+        search_dates.append(base_date - timedelta(days=2))
+
+    df = None
+    found_date = None
+    for d in search_dates:
+        d_str = d.strftime("%Y-%m-%d")
+        output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{d_str}.csv")
         if os.path.exists(output_path):
             df = pd.read_csv(output_path)
+            found_date = d_str
+            break
+
+    if df is None:
+        # Collect data only on weekdays when no file was found
+        if date is None and base_date.weekday() < 5:
+            df = collect_data()
         else:
-            raise FileNotFoundError(f"No data for {date}")
+            raise FileNotFoundError(f"No data for {date or base_date.strftime('%Y-%m-%d')}")
+    else:
+        date = found_date
 
     # Ensure recommendation values are strings
     if 'Recommendation' in df.columns:
