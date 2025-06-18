@@ -88,9 +88,16 @@ def analyze_stock(ticker):
         if pd.isna(rsi):
             return {'Ticker': ticker, 'Error': 'RSI is NaN'}
 
-        avg_30d = df['Close'].rolling(window=30).mean().iloc[-1]
-        below_avg = current_price < avg_30d
-        norm_change = ((current_price - avg_30d) / avg_30d) * 100
+        avg_30d = df["Close"].rolling(window=30).mean().iloc[-1]
+        if hasattr(avg_30d, "item"):
+            avg_30d = avg_30d.item()
+
+        if pd.isna(avg_30d):
+            below_avg = False
+            norm_change = np.nan
+        else:
+            below_avg = current_price < avg_30d
+            norm_change = ((current_price - avg_30d) / avg_30d) * 100
 
         ticker_obj = yf.Ticker(ticker)
         try:
