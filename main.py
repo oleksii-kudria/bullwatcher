@@ -258,6 +258,38 @@ def offer_telegram(date: Optional[str] = None):
     send_telegram_message(top_recommendations(df))
 
 
+def offer_history(ticker: str):
+    ticker = ticker.upper()
+    result_path = os.path.join(os.getcwd(), RESULT_DIR)
+    if not os.path.isdir(result_path):
+        print("No result directory found")
+        return
+
+    files = sorted(f for f in os.listdir(result_path) if f.endswith(".csv"))
+    for fname in files:
+        date = fname[:-4]
+        fpath = os.path.join(result_path, fname)
+        df = pd.read_csv(fpath)
+        if 'Recommendation' in df.columns:
+            df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
+
+        df = df[df['Error'].isnull() & df['Target Mean Price'].notnull()]
+        df['Score'] = (
+            (df['RSI'] < 40).astype(int) +
+            (df['Price Change %'] <= -5).astype(int) +
+            (df['Recommendation'].isin(['buy', 'strong_buy'])).astype(int)
+        )
+        df = df[df['Score'] >= 2]
+        df['Potential %'] = (
+            (df['Target Mean Price'] - df['Current Price']) / df['Current Price']
+        ) * 100
+        df = df.sort_values(by=['Score', 'Potential %'], ascending=[False, False]).head(5)
+        match = df[df['Ticker'] == ticker]
+        if not match.empty:
+            rec = match.iloc[0]['Recommendation']
+            print(f"{date}: {rec}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Stock analysis utility")
     parser.add_argument(
@@ -268,6 +300,7 @@ def main():
             "report_telegram",
             "offer_console",
             "offer_telegram",
+            "offer_history",
         ],
         help="Action to perform",
     )
@@ -288,6 +321,11 @@ def main():
         offer_console(args.date)
     elif args.command == "offer_telegram":
         offer_telegram(args.date)
+    elif args.command == "offer_history":
+        if not args.date:
+            print("Ticker symbol required")
+        else:
+            offer_history(args.date)
 
 if __name__ == "__main__":
     main()
