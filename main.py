@@ -25,9 +25,23 @@ import re
 
 
 def trimmed_mean(series: pd.Series, proportion: float = 0.1) -> float:
-    """Return the trimmed mean of a pandas Series."""
+    """Return the trimmed mean of a pandas Series.
+
+    Parameters
+    ----------
+    series : pd.Series or pd.DataFrame
+        Input data which may occasionally be a single-column DataFrame.  In
+        that case it is squeezed into a Series before processing.
+    proportion : float, optional
+        Fraction of data to trim from each end when computing the mean.
+    """
+
+    if isinstance(series, pd.DataFrame):
+        series = series.squeeze()
+
     if series.empty:
-        return float('nan')
+        return float("nan")
+
     s = series.sort_values()
     cut = int(len(s) * proportion)
     if len(s) - 2 * cut <= 0:
@@ -51,22 +65,22 @@ def analyze_stock(ticker):
         return {'Ticker': ticker, 'Error': 'No data'}
 
     try:
-        current_price = df['Close'].iloc[-1].item()
-        month_open_price = df['Close'].iloc[0].item()
+        close_series = df["Close"]
+        if isinstance(close_series, pd.DataFrame):
+            close_series = close_series.squeeze()
+
+        current_price = close_series.iloc[-1].item()
+        month_open_price = close_series.iloc[0].item()
         price_change = ((current_price - month_open_price) / month_open_price) * 100
 
         # Normalized change using trimmed mean of first and second month
-        half = len(df) // 2 or 1
-        past_trimmed = trimmed_mean(df['Close'].iloc[:half])
-        current_trimmed = trimmed_mean(df['Close'].iloc[half:])
+        half = len(close_series) // 2 or 1
+        past_trimmed = trimmed_mean(close_series.iloc[:half])
+        current_trimmed = trimmed_mean(close_series.iloc[half:])
         if np.isnan(past_trimmed) or past_trimmed == 0:
             normalized_change = np.nan
         else:
             normalized_change = ((current_trimmed - past_trimmed) / past_trimmed) * 100
-
-        close_series = df['Close']
-        if isinstance(close_series, pd.DataFrame):
-            close_series = close_series.squeeze()
 
         rsi_series = RSIIndicator(close_series, window=14).rsi()
         rsi = rsi_series.iloc[-1]
