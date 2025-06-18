@@ -15,6 +15,12 @@ SELL_TICKERS = [
     "ESLT", "KTOS", "AVAV"
 ]
 
+# Thresholds for sell recommendations
+SELL_RSI_THRESHOLD = 70
+SELL_GROWTH_THRESHOLD = 20  # percentage increase
+SELL_RECOMMENDATION_KEYS = ["sell", "underperform", "hold"]
+SELL_SCORE_THRESHOLD = 2
+
 RSI_THRESHOLD = 40
 PRICE_DROP_THRESHOLD = 5.0  # у відсотках
 

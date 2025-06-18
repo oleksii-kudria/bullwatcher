@@ -15,6 +15,10 @@ from config import (
     RESULT_DIR,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
+    SELL_RSI_THRESHOLD,
+    SELL_GROWTH_THRESHOLD,
+    SELL_RECOMMENDATION_KEYS,
+    SELL_SCORE_THRESHOLD,
 )
 import numpy as np
 import re
@@ -246,9 +250,9 @@ def top_recommendations(df, limit=5):
 
 def analyze_sell_signals(row):
     """Return sell score based on overbought conditions."""
-    rsi_flag = float(row["RSI"]) > 70
-    growth_flag = float(row["Price Change %"]) > 20
-    rec_flag = str(row["Recommendation"]).lower() in ["sell", "underperform", "hold"]
+    rsi_flag = float(row["RSI"]) > SELL_RSI_THRESHOLD
+    growth_flag = float(row["Price Change %"]) > SELL_GROWTH_THRESHOLD
+    rec_flag = str(row["Recommendation"]).lower() in SELL_RECOMMENDATION_KEYS
     return int(rsi_flag) + int(growth_flag) + int(rec_flag)
 
 
@@ -260,7 +264,7 @@ def sell_recommendations(df, limit=5):
     df = df[df["Ticker"].isin(SELL_TICKERS)]
     df = df[df["Error"].isnull()]
     df["Sell Score"] = df.apply(analyze_sell_signals, axis=1)
-    df = df[df["Sell Score"] >= 2]
+    df = df[df["Sell Score"] >= SELL_SCORE_THRESHOLD]
     df = df.sort_values(by=["Sell Score", "Price Change %"], ascending=[False, False]).head(limit)
 
     message = "\U0001F4E4 *Рекомендовані до продажу:*"
@@ -269,7 +273,7 @@ def sell_recommendations(df, limit=5):
         rsi = float(row["RSI"])
         change = float(row["Price Change %"])
         direction = "🔼🟢" if change > 0 else "🔽🔴"
-        rsi_mark = " 🚫" if rsi > 70 else ""
+        rsi_mark = " 🚫" if rsi > SELL_RSI_THRESHOLD else ""
 
         ticker = escape_markdown(row["Ticker"])
         name = escape_markdown(row["Company"]) if row.get("Company") else ""
