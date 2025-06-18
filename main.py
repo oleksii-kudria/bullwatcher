@@ -416,6 +416,18 @@ def load_latest_csv():
         df["Recommendation"] = df["Recommendation"].fillna("n/a").astype(str)
     if "Price Norm Change %" not in df.columns:
         df["Price Norm Change %"] = np.nan
+    numeric_cols = [
+        "Current Price",
+        "Open Price (month)",
+        "Price Change %",
+        "Price Norm Change %",
+        "Normalized Price Change %",
+        "RSI",
+        "Target Mean Price",
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
 
@@ -467,6 +479,18 @@ def load_or_collect(date: Optional[str] = None):
         df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
     if 'Price Norm Change %' not in df.columns:
         df['Price Norm Change %'] = np.nan
+    numeric_cols = [
+        "Current Price",
+        "Open Price (month)",
+        "Price Change %",
+        "Price Norm Change %",
+        "Normalized Price Change %",
+        "RSI",
+        "Target Mean Price",
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     return df
 
