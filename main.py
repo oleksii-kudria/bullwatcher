@@ -1,11 +1,19 @@
 # main.py
 import os
 from datetime import datetime
+import argparse
 import pandas as pd
 import yfinance as yf
 from ta.momentum import RSIIndicator
 import requests
-from config import TICKERS, RSI_THRESHOLD, PRICE_DROP_THRESHOLD, RESULT_DIR, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import (
+    TICKERS,
+    RSI_THRESHOLD,
+    PRICE_DROP_THRESHOLD,
+    RESULT_DIR,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+)
 import numpy as np
 import re
 
@@ -184,7 +192,8 @@ def top_recommendations(df, limit=5):
         message += f"\n- *{ticker}* {name} | Потенціал: +{pot}% | Реком: {rec} | 🎯 ${row['Target Mean Price']}"
     return message
 
-def main():
+def collect_data():
+    """Collect fresh stock data and save it to today's CSV file."""
     today = datetime.now().strftime('%Y-%m-%d')
     output_dir = os.path.join(os.getcwd(), RESULT_DIR)
     os.makedirs(output_dir, exist_ok=True)
@@ -194,13 +203,65 @@ def main():
 
     output_path = os.path.join(output_dir, f"{today}.csv")
     df.to_csv(output_path, index=False)
+    return df
 
-    sector_messages = format_sector_reports(df)
-    for msg in sector_messages:
+
+def load_or_collect():
+    """Load today's data if available, otherwise collect it."""
+    today = datetime.now().strftime('%Y-%m-%d')
+    output_path = os.path.join(os.getcwd(), RESULT_DIR, f"{today}.csv")
+    if os.path.exists(output_path):
+        return pd.read_csv(output_path)
+    return collect_data()
+
+
+def report_console():
+    df = load_or_collect()
+    for msg in format_sector_reports(df):
         print(msg)
+
+
+def report_telegram():
+    df = load_or_collect()
+    for msg in format_sector_reports(df):
         send_telegram_message(msg)
 
+
+def offer_console():
+    df = load_or_collect()
+    print(top_recommendations(df))
+
+
+def offer_telegram():
+    df = load_or_collect()
     send_telegram_message(top_recommendations(df))
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Stock analysis utility")
+    parser.add_argument(
+        "command",
+        choices=[
+            "collect",
+            "report_console",
+            "report_telegram",
+            "offer_console",
+            "offer_telegram",
+        ],
+        help="Action to perform",
+    )
+    args = parser.parse_args()
+
+    if args.command == "collect":
+        collect_data()
+    elif args.command == "report_console":
+        report_console()
+    elif args.command == "report_telegram":
+        report_telegram()
+    elif args.command == "offer_console":
+        offer_console()
+    elif args.command == "offer_telegram":
+        offer_telegram()
 
 if __name__ == "__main__":
     main()
