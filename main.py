@@ -127,7 +127,12 @@ def format_sector_reports(df):
     if 'Recommendation' in df.columns:
         df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
     df = df[df['Error'].isnull()] if 'Error' in df.columns else df
-    df['Sector'] = df['Sector'].fillna('Unknown')
+    if 'Sector' not in df.columns:
+        df['Sector'] = 'Unknown'
+    else:
+        df['Sector'] = df['Sector'].fillna('Unknown')
+    if df.empty:
+        return ["No valid data to generate report."]
     sector_groups = df.groupby('Sector')
     messages = []
 
@@ -158,6 +163,12 @@ def format_sector_reports(df):
             rsi = float(row['RSI'])
             change = float(row['Price Change %'])
             direction = "🔼🟢" if change > 0 else "🔽🔴"
+            norm_change = row.get('Normalized Price Change %')
+            if pd.isna(norm_change):
+                norm_str = 'n/a'
+            else:
+                norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
+                norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
 
             rsi_flag = rsi < 40
             drop_flag = change <= -5
