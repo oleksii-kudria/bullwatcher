@@ -23,6 +23,17 @@ from config import (
 import numpy as np
 import re
 
+
+def trimmed_mean(series: pd.Series, proportion: float = 0.1) -> float:
+    """Return the trimmed mean of a pandas Series."""
+    if series.empty:
+        return float('nan')
+    s = series.sort_values()
+    cut = int(len(s) * proportion)
+    if len(s) - 2 * cut <= 0:
+        return float(s.mean())
+    return float(s.iloc[cut: len(s) - cut].mean())
+
 def escape_markdown(text):
     if not isinstance(text, str):
         text = str(text)
@@ -43,6 +54,15 @@ def analyze_stock(ticker):
         current_price = df['Close'].iloc[-1].item()
         month_open_price = df['Close'].iloc[0].item()
         price_change = ((current_price - month_open_price) / month_open_price) * 100
+
+        # Normalized change using trimmed mean of first and second month
+        half = len(df) // 2 or 1
+        past_trimmed = trimmed_mean(df['Close'].iloc[:half])
+        current_trimmed = trimmed_mean(df['Close'].iloc[half:])
+        if np.isnan(past_trimmed) or past_trimmed == 0:
+            normalized_change = np.nan
+        else:
+            normalized_change = ((current_trimmed - past_trimmed) / past_trimmed) * 100
 
         close_series = df['Close']
         if isinstance(close_series, pd.DataFrame):
@@ -77,6 +97,7 @@ def analyze_stock(ticker):
             'Current Price': round(current_price, 2),
             'Open Price (month)': round(month_open_price, 2),
             'Price Change %': round(price_change, 2),
+            'Normalized Price Change %': round(normalized_change, 2) if not np.isnan(normalized_change) else None,
             'RSI': round(float(rsi), 2),
             'Below 30d Avg': below_avg,
             'RSI_check': float(rsi) < RSI_THRESHOLD,
@@ -171,7 +192,11 @@ def format_sector_reports(df):
 
             ticker = escape_markdown(row['Ticker'])
             name = escape_markdown(row['Company']) if row['Company'] else ''
-            msg_line = f"\n{emoji} *{ticker}* {name}: ${row['Current Price']} | Зміна: {direction} {abs(row['Price Change %'])}% | RSI: {row['RSI']}{risk_emoji} | Реком: {rec}"
+            msg_line = (
+                f"\n{emoji} *{ticker}* {name}: ${row['Current Price']} | "
+                f"Зміна: {direction} {abs(row['Price Change %'])}% "
+                f"(норм: {norm_str}) | RSI: {row['RSI']}{risk_emoji} | Реком: {rec}"
+            )
             if row['Target Mean Price'] is not None:
                 msg_line += f" | 🎯 ${row['Target Mean Price']}"
             message += msg_line
@@ -200,7 +225,13 @@ def top_recommendations(df, limit=5):
         rec = escape_markdown(row['Recommendation'].capitalize())
         rsi = float(row['RSI'])
         change = float(row['Price Change %'])
+        norm_change = row.get('Normalized Price Change %')
         direction = "🔼🟢" if change > 0 else "🔽🔴"
+        if pd.isna(norm_change):
+            norm_str = 'n/a'
+        else:
+            norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
+            norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
 
         rsi_flag = rsi < 40
         drop_flag = change <= -5
@@ -238,8 +269,8 @@ def top_recommendations(df, limit=5):
         pot = round(row['Potential %'], 2)
         msg_line = (
             f"\n{emoji} *{ticker}* {name}: ${row['Current Price']} | "
-            f"Зміна: {direction} {abs(change)}% | RSI: {row['RSI']}{risk_emoji} "
-            f"| Реком: {rec}"
+            f"Зміна: {direction} {abs(change)}% (норм: {norm_str}) | "
+            f"RSI: {row['RSI']}{risk_emoji} | Реком: {rec}"
         )
         if row['Target Mean Price'] is not None:
             msg_line += f" | 🎯 ${row['Target Mean Price']}"
@@ -272,7 +303,13 @@ def sell_recommendations(df, limit=5):
         rec = escape_markdown(row["Recommendation"].capitalize())
         rsi = float(row["RSI"])
         change = float(row["Price Change %"])
+        norm_change = row.get("Normalized Price Change %")
         direction = "🔼🟢" if change > 0 else "🔽🔴"
+        if pd.isna(norm_change):
+            norm_str = 'n/a'
+        else:
+            norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
+            norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
         rsi_mark = " 🚫" if rsi > SELL_RSI_THRESHOLD else ""
 
         ticker = escape_markdown(row["Ticker"])
@@ -280,7 +317,7 @@ def sell_recommendations(df, limit=5):
         msg_line = (
             f"\n- *{ticker}* {name} | Ціна: ${row['Current Price']} | "
             f"RSI: {row['RSI']}{rsi_mark} | Зміна: {direction} {abs(change)}% "
-            f"| Реком: {rec}"
+            f"(норм: {norm_str}) | Реком: {rec}"
         )
         if row.get("Target Mean Price") is not None:
             msg_line += f" | 🎯 ${row['Target Mean Price']}"
@@ -423,7 +460,13 @@ def offer_history(ticker: str):
             rec = escape_markdown(row['Recommendation'].capitalize())
             rsi = float(row['RSI'])
             change = float(row['Price Change %'])
+            norm_change = row.get('Normalized Price Change %')
             direction = "🔼🟢" if change > 0 else "🔽🔴"
+            if pd.isna(norm_change):
+                norm_str = 'n/a'
+            else:
+                norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
+                norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
 
             rsi_flag = rsi < 40
             drop_flag = change <= -5
@@ -462,8 +505,8 @@ def offer_history(ticker: str):
             price = row['Target Mean Price']
             print(
                 f"{date}: {emoji} *{ticker_md}* {name}: ${row['Current Price']} | "
-                f"Зміна: {direction} {abs(change)}% | RSI: {row['RSI']}{risk_emoji} "
-                f"| Реком: {rec} | 🎯 ${price} | Потенціал: +{pot}%"
+                f"Зміна: {direction} {abs(change)}% (норм: {norm_str}) | "
+                f"RSI: {row['RSI']}{risk_emoji} | Реком: {rec} | 🎯 ${price} | Потенціал: +{pot}%"
             )
 
 
