@@ -7,6 +7,14 @@ TICKERS = [
     "ESLT", "KTOS", "AVAV"
 ]
 
+# List of tickers to analyze for sell recommendations
+SELL_TICKERS = [
+    "NVDA", "AMD", "MSFT", "GOOGL", "AMZN", "AAPL", "META", "TSLA",
+    "CRM", "ZS", "PANW", "SNOW", "DDOG", "REGN", "VRTX", "MRNA",
+    "PLTR", "ARKK", "ON", "ASML", "RTX", "LMT", "NOC", "GD", "LHX",
+    "ESLT", "KTOS", "AVAV"
+]
+
 RSI_THRESHOLD = 40
 PRICE_DROP_THRESHOLD = 5.0  # у відсотках
 
