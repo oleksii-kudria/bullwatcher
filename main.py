@@ -260,7 +260,7 @@ def analyze_buy_signals(row):
     drop_score = change_flag or norm_flag
     return int(rsi_flag) + int(drop_score) + int(rec_flag)
 
-def top_recommendations(df, limit=5):
+def top_recommendations(df):
     df = df.copy()
     if 'Recommendation' in df.columns:
         df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
@@ -271,7 +271,7 @@ def top_recommendations(df, limit=5):
     df['Score'] = df.apply(analyze_buy_signals, axis=1)
     df = df[df['Score'] >= 2]
     df['Potential %'] = ((df['Target Mean Price'] - df['Current Price']) / df['Current Price']) * 100
-    df = df.sort_values(by=['Score', 'Potential %'], ascending=[False, False]).head(limit)
+    df = df.sort_values(by=['Score', 'Potential %'], ascending=[False, False])
 
     message = "\U0001F4A1 *Найперспективніші акції для купівлі:*"
     for _, row in df.iterrows():
