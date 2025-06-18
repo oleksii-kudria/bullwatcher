@@ -17,12 +17,14 @@ SELL_TICKERS = [
 
 # Thresholds for sell recommendations
 SELL_RSI_THRESHOLD = 70
-SELL_GROWTH_THRESHOLD = 20  # percentage increase
+SELL_GROWTH_THRESHOLD = 5  # percentage increase
+SELL_NORM_GROWTH_THRESHOLD = 2.0  # normalized increase vs 30d average
 SELL_RECOMMENDATION_KEYS = ["sell", "underperform", "hold"]
 SELL_SCORE_THRESHOLD = 2
 
 RSI_THRESHOLD = 40
 PRICE_DROP_THRESHOLD = 5.0  # у відсотках
+PRICE_NORM_DROP_THRESHOLD = 2.0  # drop vs 30d average
 
 RESULT_DIR = "result"
 

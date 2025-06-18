@@ -90,6 +90,7 @@ def analyze_stock(ticker):
 
         avg_30d = df['Close'].rolling(window=30).mean().iloc[-1]
         below_avg = current_price < avg_30d
+        norm_change = ((current_price - avg_30d) / avg_30d) * 100
 
         ticker_obj = yf.Ticker(ticker)
         try:
@@ -111,6 +112,7 @@ def analyze_stock(ticker):
             'Current Price': round(current_price, 2),
             'Open Price (month)': round(month_open_price, 2),
             'Price Change %': round(price_change, 2),
+            'Price Norm Change %': round(norm_change, 2),
             'Normalized Price Change %': round(normalized_change, 2) if not np.isnan(normalized_change) else None,
             'RSI': round(float(rsi), 2),
             'Below 30d Avg': below_avg,
@@ -180,16 +182,19 @@ def format_sector_reports(df):
             change = float(row['Price Change %'])
             direction = "🔼🟢" if change > 0 else "🔽🔴"
             norm_change = row.get('Normalized Price Change %')
+            norm_change_30 = row.get('Price Norm Change %')
             if pd.isna(norm_change):
                 norm_str = 'n/a'
             else:
                 norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
                 norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
+            if pd.isna(norm_change_30):
+                norm30_str = 'n/a'
+            else:
+                norm30_dir = "🔼🟢" if norm_change_30 > 0 else "🔽🔴"
+                norm30_str = f"{norm30_dir} {abs(round(norm_change_30, 2))}%"
 
-            rsi_flag = rsi < 40
-            drop_flag = change <= -5
-            rec_flag = row['Recommendation'] in ['buy', 'strong_buy']
-            score = sum([rsi_flag, drop_flag, rec_flag])
+            score = analyze_buy_signals(row)
 
             if score == 3:
                 emoji = '🔥'
@@ -222,7 +227,7 @@ def format_sector_reports(df):
             msg_line = (
                 f"\n{emoji} *{ticker}* {name}: ${row['Current Price']} | "
                 f"Зміна: {direction} {abs(row['Price Change %'])}% "
-                f"(норм: {norm_str}) | RSI: {row['RSI']}{risk_emoji} | Реком: {rec}"
+                f"(норм: {norm_str}, 30д: {norm30_str}) | RSI: {row['RSI']}{risk_emoji} | Реком: {rec}"
             )
             if row['Target Mean Price'] is not None:
                 msg_line += f" | 🎯 ${row['Target Mean Price']}"
@@ -232,17 +237,29 @@ def format_sector_reports(df):
 
     return messages
 
+def analyze_buy_signals(row):
+    """Return buy score based on RSI, price drop and analyst recommendation."""
+    rsi_flag = float(row.get("RSI", np.nan)) < RSI_THRESHOLD
+    change_flag = float(row.get("Price Change %", np.nan)) <= -PRICE_DROP_THRESHOLD
+    norm_val = row.get("Price Norm Change %")
+    try:
+        norm_val = float(norm_val)
+    except (TypeError, ValueError):
+        norm_val = np.nan
+    norm_flag = not np.isnan(norm_val) and norm_val <= -PRICE_NORM_DROP_THRESHOLD
+    rec_flag = str(row.get("Recommendation", "")).lower() in ["buy", "strong_buy"]
+    drop_score = change_flag or norm_flag
+    return int(rsi_flag) + int(drop_score) + int(rec_flag)
+
 def top_recommendations(df, limit=5):
     df = df.copy()
     if 'Recommendation' in df.columns:
         df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
 
     df = df[df['Error'].isnull() & df['Target Mean Price'].notnull()]
-    df['Score'] = (
-        (df['RSI'] < 40).astype(int) +
-        (df['Price Change %'] <= -5).astype(int) +
-        (df['Recommendation'].isin(['buy', 'strong_buy'])).astype(int)
-    )
+    if 'Price Norm Change %' not in df.columns:
+        df['Price Norm Change %'] = np.nan
+    df['Score'] = df.apply(analyze_buy_signals, axis=1)
     df = df[df['Score'] >= 2]
     df['Potential %'] = ((df['Target Mean Price'] - df['Current Price']) / df['Current Price']) * 100
     df = df.sort_values(by=['Score', 'Potential %'], ascending=[False, False]).head(limit)
@@ -253,17 +270,19 @@ def top_recommendations(df, limit=5):
         rsi = float(row['RSI'])
         change = float(row['Price Change %'])
         norm_change = row.get('Normalized Price Change %')
+        norm_change_30 = row.get('Price Norm Change %')
         direction = "🔼🟢" if change > 0 else "🔽🔴"
         if pd.isna(norm_change):
             norm_str = 'n/a'
         else:
             norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
             norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
-
-        rsi_flag = rsi < 40
-        drop_flag = change <= -5
-        rec_flag = row['Recommendation'] in ['buy', 'strong_buy']
-        score = sum([rsi_flag, drop_flag, rec_flag])
+        if pd.isna(norm_change_30):
+            norm30_str = 'n/a'
+        else:
+            norm30_dir = "🔼🟢" if norm_change_30 > 0 else "🔽🔴"
+            norm30_str = f"{norm30_dir} {abs(round(norm_change_30, 2))}%"
+        score = analyze_buy_signals(row)
 
         if score == 3:
             emoji = '🔥'
@@ -296,7 +315,7 @@ def top_recommendations(df, limit=5):
         pot = round(row['Potential %'], 2)
         msg_line = (
             f"\n{emoji} *{ticker}* {name}: ${row['Current Price']} | "
-            f"Зміна: {direction} {abs(change)}% (норм: {norm_str}) | "
+            f"Зміна: {direction} {abs(change)}% (норм: {norm_str}, 30д: {norm30_str}) | "
             f"RSI: {row['RSI']}{risk_emoji} | Реком: {rec}"
         )
         if row['Target Mean Price'] is not None:
@@ -308,10 +327,17 @@ def top_recommendations(df, limit=5):
 
 def analyze_sell_signals(row):
     """Return sell score based on overbought conditions."""
-    rsi_flag = float(row["RSI"]) > SELL_RSI_THRESHOLD
-    growth_flag = float(row["Price Change %"]) > SELL_GROWTH_THRESHOLD
-    rec_flag = str(row["Recommendation"]).lower() in SELL_RECOMMENDATION_KEYS
-    return int(rsi_flag) + int(growth_flag) + int(rec_flag)
+    rsi_flag = float(row.get("RSI", np.nan)) > SELL_RSI_THRESHOLD
+    growth_flag = float(row.get("Price Change %", np.nan)) >= SELL_GROWTH_THRESHOLD
+    norm_val = row.get("Price Norm Change %")
+    try:
+        norm_val = float(norm_val)
+    except (TypeError, ValueError):
+        norm_val = np.nan
+    norm_flag = not np.isnan(norm_val) and norm_val >= SELL_NORM_GROWTH_THRESHOLD
+    rec_flag = str(row.get("Recommendation", "")).lower() in SELL_RECOMMENDATION_KEYS
+    drop_score = growth_flag or norm_flag
+    return int(rsi_flag) + int(drop_score) + int(rec_flag)
 
 
 def sell_recommendations(df, limit=5):
@@ -321,6 +347,8 @@ def sell_recommendations(df, limit=5):
 
     df = df[df["Ticker"].isin(SELL_TICKERS)]
     df = df[df["Error"].isnull()]
+    if 'Price Norm Change %' not in df.columns:
+        df['Price Norm Change %'] = np.nan
     df["Sell Score"] = df.apply(analyze_sell_signals, axis=1)
     df = df[df["Sell Score"] >= SELL_SCORE_THRESHOLD]
     df = df.sort_values(by=["Sell Score", "Price Change %"], ascending=[False, False]).head(limit)
@@ -331,12 +359,18 @@ def sell_recommendations(df, limit=5):
         rsi = float(row["RSI"])
         change = float(row["Price Change %"])
         norm_change = row.get("Normalized Price Change %")
+        norm_change_30 = row.get("Price Norm Change %")
         direction = "🔼🟢" if change > 0 else "🔽🔴"
         if pd.isna(norm_change):
             norm_str = 'n/a'
         else:
             norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
             norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
+        if pd.isna(norm_change_30):
+            norm30_str = 'n/a'
+        else:
+            norm30_dir = "🔼🟢" if norm_change_30 > 0 else "🔽🔴"
+            norm30_str = f"{norm30_dir} {abs(round(norm_change_30, 2))}%"
         rsi_mark = " 🚫" if rsi > SELL_RSI_THRESHOLD else ""
 
         ticker = escape_markdown(row["Ticker"])
@@ -344,7 +378,7 @@ def sell_recommendations(df, limit=5):
         msg_line = (
             f"\n- *{ticker}* {name} | Ціна: ${row['Current Price']} | "
             f"RSI: {row['RSI']}{rsi_mark} | Зміна: {direction} {abs(change)}% "
-            f"(норм: {norm_str}) | Реком: {rec}"
+            f"(норм: {norm_str}, 30д: {norm30_str}) | Реком: {rec}"
         )
         if row.get("Target Mean Price") is not None:
             msg_line += f" | 🎯 ${row['Target Mean Price']}"
@@ -380,6 +414,8 @@ def load_latest_csv():
     df = pd.read_csv(os.path.join(result_path, latest))
     if "Recommendation" in df.columns:
         df["Recommendation"] = df["Recommendation"].fillna("n/a").astype(str)
+    if "Price Norm Change %" not in df.columns:
+        df["Price Norm Change %"] = np.nan
     return df
 
 
@@ -429,6 +465,8 @@ def load_or_collect(date: Optional[str] = None):
     # Ensure recommendation values are strings
     if 'Recommendation' in df.columns:
         df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
+    if 'Price Norm Change %' not in df.columns:
+        df['Price Norm Change %'] = np.nan
 
     return df
 
@@ -471,11 +509,9 @@ def offer_history(ticker: str):
             df['Recommendation'] = df['Recommendation'].fillna('n/a').astype(str)
 
         df = df[df['Error'].isnull() & df['Target Mean Price'].notnull()]
-        df['Score'] = (
-            (df['RSI'] < 40).astype(int) +
-            (df['Price Change %'] <= -5).astype(int) +
-            (df['Recommendation'].isin(['buy', 'strong_buy'])).astype(int)
-        )
+        if 'Price Norm Change %' not in df.columns:
+            df['Price Norm Change %'] = np.nan
+        df['Score'] = df.apply(analyze_buy_signals, axis=1)
         df = df[df['Score'] >= 2]
         df['Potential %'] = (
             (df['Target Mean Price'] - df['Current Price']) / df['Current Price']
@@ -488,17 +524,20 @@ def offer_history(ticker: str):
             rsi = float(row['RSI'])
             change = float(row['Price Change %'])
             norm_change = row.get('Normalized Price Change %')
+            norm_change_30 = row.get('Price Norm Change %')
             direction = "🔼🟢" if change > 0 else "🔽🔴"
             if pd.isna(norm_change):
                 norm_str = 'n/a'
             else:
                 norm_dir = "🔼🟢" if norm_change > 0 else "🔽🔴"
                 norm_str = f"{norm_dir} {abs(round(norm_change, 2))}%"
+            if pd.isna(norm_change_30):
+                norm30_str = 'n/a'
+            else:
+                norm30_dir = "🔼🟢" if norm_change_30 > 0 else "🔽🔴"
+                norm30_str = f"{norm30_dir} {abs(round(norm_change_30, 2))}%"
 
-            rsi_flag = rsi < 40
-            drop_flag = change <= -5
-            rec_flag = row['Recommendation'] in ['buy', 'strong_buy']
-            score = sum([rsi_flag, drop_flag, rec_flag])
+            score = analyze_buy_signals(row)
 
             if score == 3:
                 emoji = '🔥'
@@ -532,7 +571,7 @@ def offer_history(ticker: str):
             price = row['Target Mean Price']
             print(
                 f"{date}: {emoji} *{ticker_md}* {name}: ${row['Current Price']} | "
-                f"Зміна: {direction} {abs(change)}% (норм: {norm_str}) | "
+                f"Зміна: {direction} {abs(change)}% (норм: {norm_str}, 30д: {norm30_str}) | "
                 f"RSI: {row['RSI']}{risk_emoji} | Реком: {rec} | 🎯 ${price} | Потенціал: +{pot}%"
             )
 
